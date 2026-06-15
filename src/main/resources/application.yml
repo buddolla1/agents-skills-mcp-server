@@ -1,0 +1,37 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: agents-skills-mcp-server
+  ai:
+    mcp:
+      server:
+        name: agents-skills-mcp-server
+        version: 1.0.0
+        protocol: STREAMABLE
+        type: SYNC
+        streamable-http:
+          mcp-endpoint: /api/mcp
+        instructions: Exposes local GitHub Copilot agents, skills, and instructions as read-only MCP tools.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+agents:
+  repo-path: ${AGENTS_REPO_PATH:${user.home}/agents-skills-instructions}
+  agents-path: github/agents
+  skills-path: github/skills
+  instructions-path: github/instructions
+  allowed-extensions:
+    - .md
+    - .json
+    - .yml
+    - .yaml
+    - .txt
