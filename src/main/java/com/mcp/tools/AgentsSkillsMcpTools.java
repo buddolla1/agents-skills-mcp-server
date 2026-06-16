@@ -113,7 +113,7 @@ public class AgentsSkillsMcpTools {
         return instructionExecutionService.applySkillToFile(skillFileOrRelativePath, filePath);
     }
 
-    @McpTool(name = "runSkill", description = "Package a skill and a target file into an execution bundle for downstream processing")
+    @McpTool(name = "runSkill", description = "Build a Copilot-ready execution bundle for a skill and target file")
     public InstructionExecutionResult runSkill(
             @McpArg(name = "skillFileOrRelativePath", description = "Skill file name or relative path", required = true)
             String skillFileOrRelativePath,

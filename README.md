@@ -79,7 +79,9 @@ Use these tools to package a skill or agent together with a target file:
 - `runSkill`
 - `runAgentTools`
 
-These tools return the instruction content, the target file content, and parsed metadata such as declared agent tools. They do not edit files directly.
+`applySkillToFile` and `runAgentTools` return the instruction content, the target file content, and parsed metadata such as declared agent tools. They do not edit files directly.
+
+`runSkill` packages the same context and also returns a Copilot-ready execution prompt in `executionOutput`. That prompt is what a Copilot client can use to run the skill.
 
 You can pass a bare skill or agent name for the instruction input, for example `yaml-validator`. The server resolves that to the conventional markdown file path when possible.
 
@@ -90,6 +92,10 @@ You can pass a bare skill or agent name for the instruction input, for example `
 3. Use `searchAgents`, `searchSkills`, or `searchAll` to find files by keyword.
 4. Use `applySkillToFile`, `runSkill`, or `runAgentTools` when you want the server to package an instruction and a target file for downstream execution.
 5. If your client supports resources, read `repo://agents`, `repo://skills`, or `repo://instructions` for a JSON index.
+
+## 6. Copilot execution
+
+This server does not call a Copilot API directly. It returns a Copilot-ready prompt and the full skill/file context so the client can execute the skill in Copilot Chat or another Copilot-backed workflow.
 
 ## 1. Clone your agents repo
 

@@ -17,7 +17,7 @@ public class InstructionExecutionService {
 
     private static final Logger log = LoggerFactory.getLogger(InstructionExecutionService.class);
 
-    private static final String EXECUTION_NOTE = "This server packages the instruction and target file context for an MCP client to execute. It does not mutate files.";
+    private static final String EXECUTION_NOTE = "This server packages the instruction and target file context for an MCP client. It does not mutate files.";
 
     private final RepositoryFileReader repositoryFileReader;
 
@@ -26,22 +26,23 @@ public class InstructionExecutionService {
     }
 
     public InstructionExecutionResult applySkillToFile(String skillFileOrRelativePath, String filePath) throws IOException {
-        return buildResult("applySkillToFile", "skill", skillFileOrRelativePath, filePath);
+        return buildResult("applySkillToFile", "skill", skillFileOrRelativePath, filePath, false);
     }
 
     public InstructionExecutionResult runSkill(String skillFileOrRelativePath, String filePath) throws IOException {
-        return buildResult("runSkill", "skill", skillFileOrRelativePath, filePath);
+        return buildResult("runSkill", "skill", skillFileOrRelativePath, filePath, true);
     }
 
     public InstructionExecutionResult runAgentTools(String agentFileOrRelativePath, String filePath) throws IOException {
-        return buildResult("runAgentTools", "agent", agentFileOrRelativePath, filePath);
+        return buildResult("runAgentTools", "agent", agentFileOrRelativePath, filePath, false);
     }
 
     private InstructionExecutionResult buildResult(
             String operation,
             String instructionType,
             String instructionFileOrRelativePath,
-            String filePath
+            String filePath,
+            boolean executeSkill
     ) throws IOException {
         log.info("Building execution bundle: operation={}, type={}, instruction={}, target={}",
                 operation, instructionType, instructionFileOrRelativePath, filePath);
@@ -55,6 +56,7 @@ public class InstructionExecutionService {
         FileContent instruction = repositoryFileReader.readReference(instructionType, instructionFileOrRelativePath);
         FileContent target = repositoryFileReader.readWorkspaceFile(filePath);
         ParsedInstruction parsedInstruction = parseInstruction(instruction);
+        String executionOutput = executeSkill ? buildCopilotExecutionPrompt(parsedInstruction, instruction, target) : null;
 
         return new InstructionExecutionResult(
                 operation,
@@ -68,7 +70,8 @@ public class InstructionExecutionService {
                 target.type(),
                 instruction.content(),
                 target.content(),
-                EXECUTION_NOTE
+                EXECUTION_NOTE,
+                executionOutput
         );
     }
 
@@ -111,6 +114,24 @@ public class InstructionExecutionService {
         }
 
         return new ParsedInstruction(name, description, declaredTools);
+    }
+
+    private String buildCopilotExecutionPrompt(ParsedInstruction parsedInstruction, FileContent instruction, FileContent target) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Execute the repository skill below against the target file.\n\n");
+        prompt.append("Skill name: ").append(parsedInstruction.name()).append('\n');
+        prompt.append("Skill description: ").append(parsedInstruction.description()).append('\n');
+        if (!parsedInstruction.declaredTools().isEmpty()) {
+            prompt.append("Declared tools: ").append(String.join(", ", parsedInstruction.declaredTools())).append('\n');
+        }
+        prompt.append("Skill path: ").append(instruction.relativePath()).append('\n');
+        prompt.append("\nSkill markdown:\n");
+        prompt.append(instruction.content()).append('\n');
+        prompt.append("\nTarget file: ").append(target.relativePath()).append('\n');
+        prompt.append("\nTarget content:\n");
+        prompt.append(target.content()).append('\n');
+        prompt.append("\nProduce the result that the skill asks for. If the skill requires edits, explain the exact edits or return a patch plan. Do not mention that this prompt came from a tool.");
+        return prompt.toString();
     }
 
     private String value(String line) {

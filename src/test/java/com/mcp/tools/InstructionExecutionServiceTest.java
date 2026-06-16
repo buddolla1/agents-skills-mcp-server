@@ -45,28 +45,29 @@ class InstructionExecutionServiceTest {
         assertThat(result.targetRelativePath()).isEqualTo("src/main/java/com/example/App.java");
         assertThat(result.targetContent()).contains("class App");
         assertThat(result.instructionContent()).contains("Sample Skill");
+        assertThat(result.executionOutput()).isNull();
     }
 
     @Test
-    void runAgentToolsIncludesDeclaredToolsFromAgentFrontmatter() throws IOException {
+    void runSkillBuildsCopilotExecutionPrompt() throws IOException {
         RepositoryFileReader repositoryFileReader = new RepositoryFileReader(properties());
         InstructionExecutionService service = new InstructionExecutionService(repositoryFileReader);
 
-        write(tempDir.resolve("github/agents/sample.agent.md"), """
+        write(tempDir.resolve("github/skills/sample/SKILL.md"), """
                 ---
-                name: sample-agent
-                description: Example agent
-                tools: [codebase, file_operations]
+                name: sample-skill
+                description: Example skill
                 ---
-                # Sample Agent
+                # Sample Skill
                 """);
         write(tempDir.resolve("README.md"), "# Demo");
 
-        InstructionExecutionResult result = service.runAgentTools("sample.agent.md", "README.md");
+        InstructionExecutionResult result = service.runSkill("sample", "README.md");
 
-        assertThat(result.operation()).isEqualTo("runAgentTools");
-        assertThat(result.instructionName()).isEqualTo("sample-agent");
-        assertThat(result.declaredTools()).containsExactly("codebase", "file_operations");
+        assertThat(result.operation()).isEqualTo("runSkill");
+        assertThat(result.instructionName()).isEqualTo("sample-skill");
+        assertThat(result.executionOutput()).contains("Execute the repository skill below against the target file.");
+        assertThat(result.executionOutput()).contains("Sample Skill");
         assertThat(result.targetRelativePath()).isEqualTo("README.md");
     }
 

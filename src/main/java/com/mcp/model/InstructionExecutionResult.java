@@ -14,6 +14,7 @@ public record InstructionExecutionResult(
         String targetType,
         String instructionContent,
         String targetContent,
-        String note
+        String note,
+        String executionOutput
 ) {
 }
