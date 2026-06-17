@@ -10,8 +10,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "agents")
 public class AgentsRepositoryProperties {
 
-    @NotBlank
-    private String repoPath;
+    private String repoPath = "";
 
     @NotBlank
     private String agentsPath = "github/agents";

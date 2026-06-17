@@ -107,20 +107,22 @@ git clone -b agents-skills-instructions-v1 \
 
 ## 2. Configure repo path
 
-Edit `src/main/resources/application.yml`:
+Edit `src/main/resources/application.yml` if you want to point at an external repo clone:
 
 ```yaml
 agents:
-  repo-path: ${AGENTS_REPO_PATH:/Users/YOUR_USER/agents-skills-instructions}
+  repo-path: ${AGENTS_REPO_PATH:}
 ```
 
-The server expects these folders under `repo-path`:
+If `repo-path` is blank, the server reads the bundled `src/main/resources/github/...` content from the application classpath, which is the PCF-friendly default.
+
+The server expects these folders under `repo-path` when you point it at an external checkout:
 
 - `github/agents`
 - `github/skills`
 - `github/instructions`
 
-The MCP resources read from the configured `repo-path` and return a JSON index for each folder.
+The MCP resources read from the configured `repo-path` when it is set, otherwise they use the packaged resources from the jar.
 
 Or run with env variable:
 

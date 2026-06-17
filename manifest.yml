@@ -1,0 +1,11 @@
+---
+version: 1
+applications:
+  - name: agent-mcp-server
+    memory: 1G
+    disk_quota: 1G
+    instances: 1
+    buildpack: java_buildpack
+    env:
+      JBP_CONFIG_OPEN_JDK_JRE: '{ jre: { version: 21.+ } }'
+    path: build/libs/agents-skills-mcp-server-1.0.0.jar

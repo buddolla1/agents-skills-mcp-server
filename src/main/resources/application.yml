@@ -25,7 +25,7 @@ management:
       show-details: always
 
 agents:
-  repo-path: ${AGENTS_REPO_PATH:${user.home}/agents-skills-instructions}
+  repo-path: ${AGENTS_REPO_PATH:}
   agents-path: github/agents
   skills-path: github/skills
   instructions-path: github/instructions

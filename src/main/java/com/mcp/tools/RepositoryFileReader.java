@@ -3,6 +3,9 @@ package com.mcp.tools;
 import com.mcp.config.AgentsRepositoryProperties;
 import com.mcp.model.FileContent;
 import com.mcp.model.RepositoryFile;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.core.io.support.ResourcePatternResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -14,16 +17,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Stream;
 
 @Service
 public class RepositoryFileReader {
 
     private static final Logger log = LoggerFactory.getLogger(RepositoryFileReader.class);
+    private static final String CLASS_PATH_PREFIX = "classpath*:";
 
     private final AgentsRepositoryProperties properties;
+    private final ResourcePatternResolver resourcePatternResolver = new PathMatchingResourcePatternResolver();
 
     public RepositoryFileReader(AgentsRepositoryProperties properties) {
         this.properties = properties;
@@ -31,6 +38,9 @@ public class RepositoryFileReader {
 
     public List<RepositoryFile> list(String type) throws IOException {
         log.info("Listing {} files from repository", type);
+        if (!hasFilesystemRepoPath()) {
+            return listClasspath(type);
+        }
         Path base = basePath(type);
         ensureDirectoryExists(base);
 
@@ -46,6 +56,9 @@ public class RepositoryFileReader {
 
     public FileContent read(String type, String fileNameOrRelativePath) throws IOException {
         log.info("Reading {} file: {}", type, fileNameOrRelativePath);
+        if (!hasFilesystemRepoPath()) {
+            return readClasspath(type, fileNameOrRelativePath);
+        }
         Path base = basePath(type);
         ensureDirectoryExists(base);
 
@@ -64,6 +77,9 @@ public class RepositoryFileReader {
 
     public FileContent readReference(String type, String reference) throws IOException {
         log.info("Reading {} reference: {}", type, reference);
+        if (!hasFilesystemRepoPath()) {
+            return readClasspathReference(type, reference);
+        }
         Path base = basePath(type);
         ensureDirectoryExists(base);
 
@@ -86,7 +102,7 @@ public class RepositoryFileReader {
 
     public FileContent readWorkspaceFile(String fileNameOrRelativePath) throws IOException {
         log.info("Reading workspace file: {}", fileNameOrRelativePath);
-        Path base = repoRootPath();
+        Path base = hasFilesystemRepoPath() ? repoRootPath() : Path.of(System.getProperty("user.dir")).normalize().toAbsolutePath();
         ensureDirectoryExists(base);
 
         Path file = safeResolve(base, fileNameOrRelativePath);
@@ -140,18 +156,106 @@ public class RepositoryFileReader {
         }
     }
 
+    private List<RepositoryFile> listClasspath(String type) throws IOException {
+        String folder = folder(type);
+        Resource[] resources = resourcePatternResolver.getResources(CLASS_PATH_PREFIX + folder + "/**");
+        Map<String, RepositoryFile> files = new LinkedHashMap<>();
+        for (Resource resource : resources) {
+            if (!resource.isReadable() || resource.getFilename() == null || !isAllowedExtension(resource.getFilename())) {
+                continue;
+            }
+            files.putIfAbsent(classpathRelativePath(folder, resource), toRepositoryFile(type, resource, folder));
+        }
+        return files.values().stream()
+                .sorted(Comparator.comparing(RepositoryFile::relativePath))
+                .toList();
+    }
+
+    private FileContent readClasspath(String type, String fileNameOrRelativePath) throws IOException {
+        String folder = folder(type);
+        Resource resource = findClasspathResource(folder, fileNameOrRelativePath);
+        if (resource == null) {
+            throw new IllegalArgumentException("File not found under " + type + ": " + fileNameOrRelativePath);
+        }
+        return readClasspathResource(type, folder, resource);
+    }
+
+    private FileContent readClasspathReference(String type, String reference) throws IOException {
+        String folder = folder(type);
+        for (String candidate : candidateRelativePaths(type, reference)) {
+            Resource resource = findClasspathResource(folder, candidate);
+            if (resource != null) {
+                return readClasspathResource(type, folder, resource);
+            }
+        }
+        throw new IllegalArgumentException("File not found under " + type + ": " + reference);
+    }
+
+    private FileContent readClasspathResource(String type, String folder, Resource resource) throws IOException {
+        ensureAllowedExtension(resource);
+        String content = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        String relativePath = classpathRelativePath(folder, resource);
+        return new FileContent(resource.getFilename(), relativePath, type, content);
+    }
+
+    private Resource findClasspathResource(String folder, String relativePath) throws IOException {
+        Resource[] resources = resourcePatternResolver.getResources(CLASS_PATH_PREFIX + folder + "/" + relativePath);
+        for (Resource resource : resources) {
+            if (resource.isReadable()) {
+                return resource;
+            }
+        }
+        return null;
+    }
+
+    private RepositoryFile toRepositoryFile(String type, Resource resource, String folder) {
+        try {
+            return new RepositoryFile(
+                    resource.getFilename(),
+                    classpathRelativePath(folder, resource),
+                    type,
+                    resource.contentLength()
+            );
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to read file metadata: " + resource.getFilename(), e);
+        }
+    }
+
+    private String classpathRelativePath(String folder, Resource resource) {
+        String location;
+        try {
+            location = resource.getURL().toString();
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to resolve classpath resource location", e);
+        }
+        String marker = folder + "/";
+        int index = location.indexOf(marker);
+        if (index >= 0) {
+            return location.substring(index + marker.length());
+        }
+        String filename = resource.getFilename();
+        return filename != null ? filename : location;
+    }
+
     private Path basePath(String type) {
-        String folder = switch (type) {
+        return Path.of(properties.getRepoPath(), folder(type)).normalize().toAbsolutePath();
+    }
+
+    private Path repoRootPath() {
+        return Path.of(properties.getRepoPath()).normalize().toAbsolutePath();
+    }
+
+    private boolean hasFilesystemRepoPath() {
+        return StringUtils.hasText(properties.getRepoPath());
+    }
+
+    private String folder(String type) {
+        return switch (type) {
             case "agent" -> properties.getAgentsPath();
             case "skill" -> properties.getSkillsPath();
             case "instruction" -> properties.getInstructionsPath();
             default -> throw new IllegalArgumentException("Unsupported repository type: " + type);
         };
-        return Path.of(properties.getRepoPath(), folder).normalize().toAbsolutePath();
-    }
-
-    private Path repoRootPath() {
-        return Path.of(properties.getRepoPath()).normalize().toAbsolutePath();
     }
 
     private List<String> candidateRelativePaths(String type, String reference) {
@@ -190,6 +294,20 @@ public class RepositoryFileReader {
         return properties.getAllowedExtensions().stream()
                 .map(ext -> ext.toLowerCase(Locale.ROOT))
                 .anyMatch(fileName::endsWith);
+    }
+
+    private boolean isAllowedExtension(String fileName) {
+        String normalized = fileName.toLowerCase(Locale.ROOT);
+        return properties.getAllowedExtensions().stream()
+                .map(ext -> ext.toLowerCase(Locale.ROOT))
+                .anyMatch(normalized::endsWith);
+    }
+
+    private void ensureAllowedExtension(Resource resource) {
+        String filename = resource.getFilename();
+        if (filename == null || !isAllowedExtension(filename)) {
+            throw new IllegalArgumentException("File extension not allowed: " + filename);
+        }
     }
 
     private void ensureDirectoryExists(Path base) {
